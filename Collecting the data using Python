@@ -1,0 +1,71 @@
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import minimize
+
+# Define the stock symbols
+clean_energy_stocks = ['VWS.CO', 'BEP', 'EDPR.LS', 'RUN', 'MEL.NZ', 'VER.VI', 'FSLR', '9502.T', '009830.KS', 'ORA', 'ENPH', 'BE', 'SHLS', 'NEOEN.PA', 'BLX.TO', 'CWEN', 'ENLT.TA', 'ARRY', 'NXT', 'SEDG', 'ECV.DE', 'PLUG', 'ERG.MI', 'ANE.MC', 'GPRE', 'NDX1.DE', 'CSIQ', '0588.HK', 'INE.TO', 'NEL.OL']
+oil_stocks = ['SU', 'PBR', 'COP', 'BP', 'EC', 'EOG', 'XOM', 'MPC', 'CVX', 'HES', 'PSX', 'MRO', 'EQNR', '0857.HK', 'OXY', 'SHEL', 'VLO', 'TTE']
+
+# Function to get stock data
+def get_stock_data(tickers, start_date, end_date):
+    data = yf.download(tickers, start=start_date, end=end_date)['Adj Close']
+    return data
+
+# Calculate portfolio performance
+def portfolio_annual_performance(weights, mean_returns, cov_matrix):
+    returns = np.sum(mean_returns*weights ) *252
+    std = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) * np.sqrt(252)
+    return std, returns
+
+# Minimize the negative Sharpe Ratio
+def negative_sharpe(weights, mean_returns, cov_matrix, risk_free_rate):
+    p_var, p_ret = portfolio_annual_performance(weights, mean_returns, cov_matrix)
+    return -(p_ret - risk_free_rate) / p_var
+
+# Constraints and bounds
+def optimize_portfolio(tickers, start_date, end_date, risk_free_rate=0.02):
+    data = get_stock_data(tickers, start_date, end_date)
+    mean_returns = data.pct_change().mean()
+    cov_matrix = data.pct_change().cov()
+
+    num_assets = len(tickers)
+    args = (mean_returns, cov_matrix, risk_free_rate)
+    constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
+    bound = (0.0,1.0)
+    bounds = tuple(bound for asset in range(num_assets))
+
+    result = minimize(negative_sharpe, num_assets*[1./num_assets,], args=args,
+                        method='SLSQP', bounds=bounds, constraints=constraints)
+
+    return result
+
+# Optimize for both portfolios
+start_date = '2019-01-01'
+end_date = '2024-01-01'
+clean_energy_portfolio = optimize_portfolio(clean_energy_stocks, start_date, end_date)
+oil_portfolio = optimize_portfolio(oil_stocks, start_date, end_date)
+
+# Print optimized weights for each portfolio
+print("Optimized Portfolio Weights for Clean Energy Stocks:")
+print(clean_energy_portfolio['x'])
+print("\nOptimized Portfolio Weights for Oil Stocks:")
+print(oil_portfolio['x'])
+
+Optimized Portfolio Weights for Clean Energy Stocks:
+[7.58945937e-02 7.19554489e-17 9.92050616e-02 0.00000000e+00
+ 4.38354797e-15 1.20330856e-15 0.00000000e+00 0.00000000e+00
+ 9.94974427e-16 0.00000000e+00 7.72611758e-02 0.00000000e+00
+ 1.82766244e-01 1.53350927e-01 0.00000000e+00 1.46694951e-16
+ 0.00000000e+00 5.27255473e-17 1.39144655e-01 8.03054997e-17
+ 0.00000000e+00 0.00000000e+00 2.26658824e-01 3.09658305e-17
+ 6.94094372e-16 1.06439515e-15 1.19053869e-15 4.30592079e-15
+ 4.57185186e-02 0.00000000e+00]
+
+Optimized Portfolio Weights for Oil Stocks:
+[2.56224805e-01 0.00000000e+00 0.00000000e+00 0.00000000e+00
+ 2.28549818e-16 0.00000000e+00 2.70725282e-16 3.51173976e-01
+ 1.96167153e-01 0.00000000e+00 3.64725611e-16 1.96434065e-01
+ 0.00000000e+00 0.00000000e+00 1.25225351e-16 0.00000000e+00
+ 5.30716963e-16 0.00000000e+00]
